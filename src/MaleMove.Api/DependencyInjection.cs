@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using MaleMove.Api.Development;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace MaleMove.Api;
@@ -13,17 +14,27 @@ public static class DependencyInjection
 
         var authority = configuration["Authentication:Authority"];
         var audience = configuration["Authentication:Audience"];
-        if (!environment.IsDevelopment() && (string.IsNullOrWhiteSpace(authority) || string.IsNullOrWhiteSpace(audience)))
+        var developmentTokens = DevelopmentTokenOptions.From(configuration, environment);
+        if (developmentTokens is null && !environment.IsDevelopment() && (string.IsNullOrWhiteSpace(authority) || string.IsNullOrWhiteSpace(audience)))
             throw new InvalidOperationException("Authentication:Authority and Authentication:Audience are required outside Development.");
+        if (developmentTokens is not null) services.AddSingleton(developmentTokens);
 
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
         {
-            options.Authority = authority;
-            options.Audience = audience;
-            options.RequireHttpsMetadata = !environment.IsDevelopment();
             options.MapInboundClaims = false;
             options.TokenValidationParameters.RoleClaimType = "role";
             options.TokenValidationParameters.NameClaimType = "name";
+            if (developmentTokens is not null)
+            {
+                // Local development only: tokens come from DevTokenController instead of an OIDC issuer.
+                options.TokenValidationParameters.ValidIssuer = DevelopmentTokenOptions.Issuer;
+                options.TokenValidationParameters.ValidAudience = developmentTokens.Audience;
+                options.TokenValidationParameters.IssuerSigningKey = developmentTokens.SigningKey;
+                return;
+            }
+            options.Authority = authority;
+            options.Audience = audience;
+            options.RequireHttpsMetadata = !environment.IsDevelopment();
         });
 
         services.AddAuthorization(options =>

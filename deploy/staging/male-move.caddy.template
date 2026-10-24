@@ -1,0 +1,15 @@
+# MALÉ MOVE staging. Copy to /opt/stacks/proxy/Caddyfile.d/male-move.caddy (ship.sh fills in the hash),
+# validate, then reload Caddy. Basic auth guards the whole site: the API issues local tokens on staging.
+staging-4.zouriel.com {
+	header X-Robots-Tag "noindex, nofollow"
+	header >Strict-Transport-Security "max-age=31536000"
+	basic_auth {
+		malemove __BASIC_AUTH_HASH__
+	}
+	handle /api/* {
+		reverse_proxy male-move-api:8080
+	}
+	handle {
+		reverse_proxy male-move-web:8080
+	}
+}

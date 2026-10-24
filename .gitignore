@@ -17,3 +17,5 @@ TestResults/
 *.db
 *.sqlite
 
+
+out/

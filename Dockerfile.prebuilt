@@ -1,0 +1,14 @@
+# Packages an API published on the workstation (dotnet publish src/MaleMove.Api -c Release -o out),
+# for hosts where restoring inside a build container is slow. Same runtime image as Dockerfile.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
+ENV ASPNETCORE_HTTP_PORTS=8080 \
+    DOTNET_EnableDiagnostics=0
+WORKDIR /app
+RUN groupadd --system --gid 10001 appgroup \
+    && useradd --system --uid 10001 --gid appgroup --home-dir /app --no-create-home appuser \
+    && mkdir -p /var/lib/male-move/private-permits \
+    && chown -R appuser:appgroup /app /var/lib/male-move
+COPY --chown=appuser:appgroup out ./
+USER 10001:10001
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "MaleMove.Api.dll"]

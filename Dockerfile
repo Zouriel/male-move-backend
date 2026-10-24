@@ -9,8 +9,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0
 WORKDIR /app
-RUN addgroup --system --gid 10001 appgroup \
-    && adduser --system --uid 10001 --ingroup appgroup --home /app appuser \
+RUN groupadd --system --gid 10001 appgroup \
+    && useradd --system --uid 10001 --gid appgroup --home-dir /app --no-create-home appuser \
     && mkdir -p /var/lib/male-move/private-permits \
     && chown -R appuser:appgroup /app /var/lib/male-move
 COPY --from=build --chown=appuser:appgroup /out ./
