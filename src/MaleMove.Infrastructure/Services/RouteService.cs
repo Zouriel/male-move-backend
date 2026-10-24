@@ -174,6 +174,8 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         if (!double.IsFinite(point.Latitude) || !double.IsFinite(point.Longitude)
             || point.Latitude is < -90 or > 90 || point.Longitude is < -180 or > 180)
             throw new AppException("Coordinates must be finite latitude/longitude values.", 422, "coordinate_invalid");
+        if (point.Latitude is < 4.0 or > 4.5 || point.Longitude is < 73.2 or > 73.8)
+            throw new AppException("Coordinates must be within the supported Greater Malé area.", 422, "coordinate_outside_supported_area");
     }
 
     private sealed record PathStep(RoadSegment Edge, DateTimeOffset EnteredAt, IReadOnlyList<Guid> AffectedPermitIds);

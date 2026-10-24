@@ -7,7 +7,7 @@ Controller-based .NET 10 REST API for MALÉ MOVE. The solution follows the layer
 - JWT bearer authentication and role-based policies.
 - Permit list/detail/edit/submit/review endpoints and private upload storage with size, media-type, and signature checks.
 - Population-series and source-register read endpoints.
-- A graph-based route calculation service with approval/time-window-aware closures and clearly labelled estimated times.
+- A graph-based route calculation service restricted to the supported Greater Malé bounds (latitude 4.0–4.5, longitude 73.2–73.8), with approval/time-window-aware closures and clearly labelled estimated times.
 - PostgreSQL/PostGIS EF Core model and Docker Compose stack.
 - Permit audit events written atomically with uploads, edits, submissions, approvals, and rejections.
 
