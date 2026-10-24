@@ -14,6 +14,9 @@ public sealed class DevelopmentTokenOptions
 
     public required SymmetricSecurityKey SigningKey { get; init; }
     public required string Audience { get; init; }
+    /// <summary>When set (Authentication:LoginUsername/LoginPassword), tokens are issued only for this login.</summary>
+    public string? LoginUsername { get; init; }
+    public string? LoginPassword { get; init; }
 
     public static DevelopmentTokenOptions? From(IConfiguration configuration, IWebHostEnvironment environment)
     {
@@ -28,6 +31,8 @@ public sealed class DevelopmentTokenOptions
         {
             SigningKey = new SymmetricSecurityKey(bytes),
             Audience = configuration["Authentication:Audience"] ?? "male-move-api",
+            LoginUsername = configuration["Authentication:LoginUsername"],
+            LoginPassword = configuration["Authentication:LoginPassword"],
         };
     }
 }

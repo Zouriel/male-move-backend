@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using MaleMove.Api.Development;
 using MaleMove.Application.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -14,11 +16,16 @@ public sealed class DevTokenController(IServiceProvider services) : BaseApiContr
 {
     private static readonly Guid DevelopmentUserId = Guid.Parse("00000000-0000-4000-8000-000000000001");
 
+    public sealed record LoginRequest(string? Username, string? Password);
+
     [HttpPost]
-    public IActionResult Issue([FromQuery] string role = "Administrator")
+    public IActionResult Issue([FromBody] LoginRequest? login, [FromQuery] string role = "Administrator")
     {
         var options = services.GetService<DevelopmentTokenOptions>();
         if (options is null) return NotFound();
+        if (!string.IsNullOrEmpty(options.LoginPassword)
+            && !(Matches(login?.Username, options.LoginUsername ?? "") & Matches(login?.Password, options.LoginPassword)))
+            throw new AppException("Incorrect username or password.", 401, "login_invalid");
         if (!DevelopmentTokenOptions.Roles.Contains(role, StringComparer.Ordinal))
             throw new AppException($"Role must be one of: {string.Join(", ", DevelopmentTokenOptions.Roles)}.", 400, "role_invalid");
 
@@ -38,4 +45,7 @@ public sealed class DevTokenController(IServiceProvider services) : BaseApiContr
         });
         return Success(new { accessToken = token, expiresAt = expires, role });
     }
+
+    private static bool Matches(string? given, string expected) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given ?? ""), Encoding.UTF8.GetBytes(expected));
 }
