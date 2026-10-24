@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite()));
         services.AddScoped<IPermitService, PermitService>();
         services.AddScoped<IPermitUploadService, PermitUploadService>();
+        services.AddScoped<IPermitExtractionService, PermitExtractionService>();
         services.AddScoped<IPopulationService, PopulationService>();
         services.AddScoped<IDataSourceService, DataSourceService>();
         services.AddScoped<IRouteService, RouteService>();

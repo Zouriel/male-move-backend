@@ -27,17 +27,19 @@ public sealed class MapService(AppDbContext db) : IMapService
     {
         var area = CreateBounds(bounds);
         var rows = await db.Permits.AsNoTracking()
-            .Where(x => x.ApprovalState == PermitApprovalState.Approved && x.StartsAt <= at && x.EndsAt > at)
+            // Approved works in effect now, plus permits awaiting review so a new submission shows at once (marked pending).
+            .Where(x => (x.ApprovalState == PermitApprovalState.Approved && x.StartsAt <= at && x.EndsAt > at)
+                        || ((x.ApprovalState == PermitApprovalState.Submitted || x.ApprovalState == PermitApprovalState.NeedsReview) && x.EndsAt > at))
             .SelectMany(x => x.RoadSegments.Where(segment => segment.RoadSegment.Geometry.Intersects(area)).Select(segment => new
             {
-                x.Id, x.PermitNumber, x.LocationDescription, x.ImpactType, x.StartsAt, x.EndsAt,
+                x.Id, x.PermitNumber, x.LocationDescription, x.ImpactType, x.StartsAt, x.EndsAt, x.ApprovalState,
                 Geometry = segment.RoadSegment.Geometry
             }))
             .Take(MaximumFeatures + 1).ToListAsync(cancellationToken);
         var truncated = rows.Count > MaximumFeatures;
         var features = rows.Take(MaximumFeatures).Select(x => new RoadworkFeatureDto(x.Id, x.PermitNumber,
             x.LocationDescription, x.ImpactType.ToString(), x.StartsAt!.Value, x.EndsAt!.Value,
-            x.Geometry.Coordinates.Select(ToCoordinate).ToArray())).ToArray();
+            x.Geometry.Coordinates.Select(ToCoordinate).ToArray(), x.ApprovalState.ToString())).ToArray();
         return new MapFeaturePage<RoadworkFeatureDto>(features, truncated);
     }
 

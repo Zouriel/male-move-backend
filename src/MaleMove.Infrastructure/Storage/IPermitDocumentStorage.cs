@@ -6,5 +6,6 @@ public interface IPermitDocumentStorage
 {
     Task<StoredDocument> SaveAsync(Stream content, CancellationToken cancellationToken);
     Task DeleteAsync(string storageKey, CancellationToken cancellationToken);
+    Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken);
 }
 

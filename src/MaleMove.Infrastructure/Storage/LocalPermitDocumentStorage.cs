@@ -36,6 +36,13 @@ public sealed class LocalPermitDocumentStorage(IConfiguration configuration) : I
         return Task.CompletedTask;
     }
 
+    public Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Stream stream = new FileStream(ResolvePath(storageKey), FileMode.Open, FileAccess.Read, FileShare.Read, 81920, FileOptions.Asynchronous);
+        return Task.FromResult(stream);
+    }
+
     private string ResolvePath(string key)
     {
         if (Path.GetFileName(key) != key || key.Contains("..", StringComparison.Ordinal))
