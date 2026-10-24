@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Configuration;
 
 namespace MaleMove.Infrastructure.Storage;
 
@@ -45,4 +46,3 @@ public sealed class LocalPermitDocumentStorage(IConfiguration configuration) : I
         return path;
     }
 }
-
