@@ -34,8 +34,8 @@ public sealed class PermitService(AppDbContext db) : IPermitService
             ?? throw new AppException("Permit was not found.", 404, "permit_not_found");
         if (permit.Revision != request.Revision)
             throw new AppException("This permit changed since it was loaded. Refresh and review the current version.", 409, "revision_conflict");
-        if (permit.ApprovalState == PermitApprovalState.Approved)
-            throw new AppException("Approved permit revisions cannot be edited. Create a new revision through the revision workflow.", 409, "approved_revision_locked");
+        if (permit.ApprovalState is not (PermitApprovalState.Draft or PermitApprovalState.NeedsReview or PermitApprovalState.Rejected))
+            throw new AppException("Only draft, rejected, or returned permits can be edited. Submitted and approved permits are locked.", 409, "permit_revision_locked");
         if (string.IsNullOrWhiteSpace(request.PermitNumber) || string.IsNullOrWhiteSpace(request.LocationDescription)
             || string.IsNullOrWhiteSpace(request.WorkDescription))
             throw new AppException("Permit number, location and work description are required.", 422, "required_field_missing");
@@ -69,6 +69,8 @@ public sealed class PermitService(AppDbContext db) : IPermitService
     {
         var permit = await db.Permits.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new AppException("Permit was not found.", 404, "permit_not_found");
+        if (permit.ApprovalState == PermitApprovalState.Submitted)
+            return ToDto(permit);
         if (permit.ApprovalState is not (PermitApprovalState.Draft or PermitApprovalState.NeedsReview))
             throw new AppException("Only draft or corrected permits can be submitted.", 409, "invalid_permit_transition");
         if (permit.StartsAt is null || permit.EndsAt is null || permit.ImpactType == PermitImpactType.Unknown)

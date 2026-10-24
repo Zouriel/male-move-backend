@@ -38,7 +38,7 @@ services:
       clamav:
         condition: service_started
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       AllowedHosts: ${ALLOWED_HOSTS:?Set the exact comma-separated API host names}
       ConnectionStrings__Postgres: Host=db;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Include Error Detail=false
       Authentication__Authority: ${JWT_AUTHORITY:?Set JWT_AUTHORITY to your OIDC issuer}

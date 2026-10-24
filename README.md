@@ -18,10 +18,10 @@ Malware scanning is fail-closed through the private ClamAV service in Compose. T
 1. Install the .NET 10 SDK and Docker Compose.
 2. Copy `.env.example` to `.env` and replace every placeholder with local development values. Never commit `.env`.
 3. Set the OIDC authority/audience and exact Angular origin. The issuer must provide a UUID `sub` and `role` claims matching `Administrator`, `DataSteward`, `PermitOfficer`, `PermitApprover`, or `Planner`. A development identity provider or token issuer is required for protected endpoints.
-4. Start PostGIS with `docker compose up -d db`. Compose binds PostgreSQL only to `127.0.0.1:5432` and the API only to `127.0.0.1:5080` on the host.
+4. Start PostGIS with `docker compose up -d db`. Compose binds PostgreSQL only to `127.0.0.1:5432` and the API only to `127.0.0.1:5080` on the host. The API environment defaults to `Production`; set `ASPNETCORE_ENVIRONMENT=Development` only for local development so OpenAPI remains disabled on a deployed stack.
 5. In the same shell, load the local database values with `. ./.env` and export a host-reachable connection string: `export ConnectionStrings__Postgres="Host=127.0.0.1;Port=5432;Database=$POSTGRES_DB;Username=$POSTGRES_USER;Password=$POSTGRES_PASSWORD;Include Error Detail=false"`.
 6. From this directory, run `dotnet tool restore`, then `dotnet ef migrations add InitialCreate --project src/MaleMove.Infrastructure --startup-project src/MaleMove.Api`, then `dotnet ef database update --project src/MaleMove.Infrastructure --startup-project src/MaleMove.Api`.
-7. Configure a local OIDC issuer and set `Authentication__Authority`, `Authentication__Audience`, and the matching role claims. Start the API with `ASPNETCORE_URLS=http://127.0.0.1:5080 dotnet run --project src/MaleMove.Api`.
+7. Configure a local OIDC issuer and set `Authentication__Authority`, `Authentication__Audience`, and the matching role claims. Start the API with `ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://127.0.0.1:5080 dotnet run --project src/MaleMove.Api`.
 
 OpenAPI is exposed only in Development. The API expects the database schema to have been migrated before startup. `/api/v1/health` is an anonymous liveness endpoint; `/api/v1/health/ready` checks database readiness without exposing connection details.
 
