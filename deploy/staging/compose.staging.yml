@@ -1,0 +1,119 @@
+# MALÉ MOVE staging on zouriel-server, served at https://staging-4.zouriel.com (route: male-move.caddy).
+# The web app proxies nothing itself: Caddy sends /api/* to the API and everything else to the web
+# container, so the app and API are same-origin.
+#
+# Shares nothing with the other stacks on the host: its own Postgres, ClamAV, volumes and internal
+# network. Only male-move-api and male-move-web join the shared `proxy` network, under prefixed names.
+# Server layout: /opt/apps/male-move/{male-move-backend,male-move-frontend} are clones of the GitHub repos and
+# /opt/apps/male-move/.env holds POSTGRES_PASSWORD, DEV_SIGNING_KEY and NODE_AUTH_TOKEN (read:packages).
+# Deploy with `deploy male-move` (deploy/staging/deploy-script-male-move), which pulls main and runs:
+#   docker compose -p male-move -f male-move-backend/deploy/staging/compose.staging.yml --env-file .env up -d --build
+name: male-move
+
+x-hardened: &hardened
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  restart: unless-stopped
+
+services:
+  male-move-postgres:
+    # Same pinned PostGIS image as the other stacks on this host.
+    image: postgis/postgis:17-3.5@sha256:01a6a70e41e6c4467c8f55f6063555ed72db2d6662cd0d571040d42eadaeb6f6
+    container_name: male-move-postgres
+    <<: *hardened
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    read_only: true
+    tmpfs: [/var/run/postgresql, /tmp]
+    environment:
+      POSTGRES_DB: malemove
+      POSTGRES_USER: malemove_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - male-move-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U malemove_app -d malemove"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [male-move-internal]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+
+  male-move-clamav:
+    image: clamav/clamav:1.4
+    container_name: male-move-clamav
+    <<: *hardened
+    # The entrypoint fixes ownership and drops to the clamav user; freshclam writes signatures to the volume.
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID]
+    volumes:
+      - male-move-clamav:/var/lib/clamav
+    networks: [male-move-internal]
+    mem_limit: 1536m
+    cpus: 1.0
+
+  male-move-api:
+    build:
+      context: ../..
+    image: male-move/api:latest
+    container_name: male-move-api
+    <<: *hardened
+    read_only: true
+    tmpfs: ["/tmp:size=64m,noexec,nosuid,nodev"]
+    depends_on:
+      male-move-postgres:
+        condition: service_healthy
+      male-move-clamav:
+        condition: service_started
+    environment:
+      # Staging: production code paths plus the local token issuer (no identity provider yet).
+      # The whole site is behind Caddy basic auth because of that.
+      ASPNETCORE_ENVIRONMENT: Staging
+      AllowedHosts: staging-4.zouriel.com
+      ConnectionStrings__Postgres: Host=male-move-postgres;Port=5432;Database=malemove;Username=malemove_app;Password=${POSTGRES_PASSWORD:?};Include Error Detail=false
+      Database__MigrateOnStartup: "true"
+      Authentication__Audience: male-move-api
+      Authentication__DevelopmentSigningKey: ${DEV_SIGNING_KEY:?}
+      Cors__AllowedOrigins__0: https://staging-4.zouriel.com
+      MalwareScanner__Host: male-move-clamav
+      MalwareScanner__Port: "3310"
+      PermitStorage__Path: /var/lib/male-move/private-permits
+    volumes:
+      - male-move-permits:/var/lib/male-move/private-permits
+    networks: [male-move-internal, proxy]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+
+  male-move-web:
+    build:
+      context: ../../../male-move-frontend
+      args:
+        CONFIGURATION: staging
+      # @zouriel/ui is a private GitHub Packages dependency: the token goes in as a build secret.
+      secrets: [npm_token]
+    image: male-move/web:latest
+    container_name: male-move-web
+    <<: *hardened
+    # nginx-unprivileged runs as uid 101 on port 8080 and needs no capabilities.
+    read_only: true
+    tmpfs: [/var/cache/nginx, /tmp]
+    networks: [proxy]
+    mem_limit: 64m
+    cpus: 0.5
+    pids_limit: 64
+
+volumes:
+  male-move-postgres:
+  male-move-clamav:
+  male-move-permits:
+
+secrets:
+  # NODE_AUTH_TOKEN from .env. BuildKit mounts it for npm ci only; it is not stored in an image layer.
+  npm_token:
+    environment: NODE_AUTH_TOKEN
+
+networks:
+  male-move-internal:
+  proxy:
+    external: true

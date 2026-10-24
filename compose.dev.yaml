@@ -1,0 +1,7 @@
+# Local development only: publishes ClamAV on the loopback interface so an API
+# started with `dotnet run` on the host can reach it.
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d db clamav
+services:
+  clamav:
+    ports:
+      - "127.0.0.1:${CLAMAV_HOST_PORT:-3310}:3310"
