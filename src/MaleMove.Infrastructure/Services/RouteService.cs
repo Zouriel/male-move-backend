@@ -16,6 +16,9 @@ public sealed class RouteService(AppDbContext db) : IRouteService
     {
         ValidateCoordinate(request.Origin);
         ValidateCoordinate(request.Destination);
+        var vehicle = (request.VehicleType ?? VehicleTypes.Motorcycle).ToLowerInvariant();
+        if (!VehicleTypes.All.Contains(vehicle))
+            throw new AppException($"Vehicle type must be one of: {string.Join(", ", VehicleTypes.All)}.", 400, "vehicle_type_invalid");
 
         var origin = GeometryFactory.CreatePoint(new Coordinate(request.Origin.Longitude, request.Origin.Latitude));
         var destination = GeometryFactory.CreatePoint(new Coordinate(request.Destination.Longitude, request.Destination.Latitude));
@@ -27,6 +30,9 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         var startNode = ClosestEndpoint(originSegment, request.Origin);
         var destinationNode = ClosestEndpoint(destinationSegment, request.Destination);
         var edges = await db.RoadSegments.AsNoTracking().ToListAsync(cancellationToken);
+        // People on foot may walk a one-way street against its direction.
+        if (vehicle == VehicleTypes.Walking)
+            edges.AddRange(edges.Where(x => x.IsOneWay).Select(Reversed).ToList());
         var restrictions = await db.PermitRoadSegments.AsNoTracking()
             .Where(x => x.Permit.ApprovalState == PermitApprovalState.Approved)
             .Include(x => x.Permit)
@@ -36,7 +42,7 @@ public sealed class RouteService(AppDbContext db) : IRouteService
             ? null
             : await db.TrafficProfiles.AsNoTracking().Where(x => x.Id == request.TrafficProfileId && x.IsActive).ToListAsync(cancellationToken);
 
-        var primary = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, null);
+        var primary = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, null, vehicle);
         if (primary is null)
             throw new AppException("No valid route was found. Check the road network and active restrictions.", 422, "route_not_found");
 
@@ -44,7 +50,7 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         if (primary.Steps.Count > 1)
         {
             var detourEdge = primary.Steps.OrderByDescending(x => x.Edge.LengthMeters).First().Edge;
-            alternative = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, [detourEdge.Id]);
+            alternative = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, [detourEdge.Id], vehicle);
             if (alternative is not null && alternative.Steps.Select(x => x.Edge.Id).SequenceEqual(primary.Steps.Select(x => x.Edge.Id)))
                 alternative = null;
         }
@@ -58,7 +64,7 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         return new RouteResultDto(Guid.NewGuid(), alternatives,
             "Estimated traffic scenario — no live traffic observations connected.", profileVersion,
             networkVersion, DateTimeOffset.UtcNow,
-            ["Travel times use assumed base speeds and configured scenario multipliers.",
+            [$"Estimated for a {vehicle}. Travel times use assumed base speeds and configured scenario multipliers.",
              "Permit restrictions apply only when the permit revision is approved and effective at estimated segment entry.",
              "Endpoints are snapped to the nearest loaded road segment."]);
     }
@@ -70,7 +76,8 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         IReadOnlyDictionary<Guid, PermitRoadSegment[]> restrictions,
         IReadOnlyList<TrafficProfile>? profiles,
         DateTimeOffset departure,
-        IReadOnlyCollection<Guid>? bannedEdges)
+        IReadOnlyCollection<Guid>? bannedEdges,
+        string vehicle)
     {
         if (start == target) return new PathResult([], departure, departure, 0);
         var adjacency = edges.GroupBy(x => x.FromNodeId).ToDictionary(x => x.Key, x => x.ToArray());
@@ -93,7 +100,7 @@ public sealed class RouteService(AppDbContext db) : IRouteService
                 if (active.Any(x => x.Permit.ImpactType == PermitImpactType.FullClosure
                                     || x.RestrictionType.Equals("full_closure", StringComparison.OrdinalIgnoreCase))) continue;
 
-                var baseSpeed = edge.AssumedBaseSpeedKmh.GetValueOrDefault(15d);
+                var baseSpeed = SpeedFor(vehicle, edge.AssumedBaseSpeedKmh.GetValueOrDefault(15d));
                 var multiplier = GetMultiplier(profiles, edge.RoadClass, TimeOnly.FromDateTime(localEntry.DateTime));
                 if (baseSpeed <= 0 || multiplier <= 0) continue;
                 var delay = active.Sum(x => Math.Max(0, x.DelaySeconds ?? 0));
@@ -135,6 +142,31 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         return new RouteAlternativeDto(rank, coordinates, path.DistanceMeters,
             Math.Max(0, (path.Arrival - path.Departure).TotalSeconds), path.Arrival, permitIds);
     }
+
+    /// <summary>Assumed speeds: road base speeds are for cars; motorcycles filter through traffic, bicycles cap at 14 km/h, walking is 4.8 km/h.</summary>
+    private static double SpeedFor(string vehicle, double roadBaseSpeed) => vehicle switch
+    {
+        VehicleTypes.Motorcycle => roadBaseSpeed * 1.15,
+        VehicleTypes.Bicycle => Math.Min(roadBaseSpeed, 14d),
+        VehicleTypes.Walking => 4.8,
+        _ => roadBaseSpeed,
+    };
+
+    private static RoadSegment Reversed(RoadSegment edge) => new()
+    {
+        Id = edge.Id,
+        OsmWayId = edge.OsmWayId,
+        FromNodeId = edge.ToNodeId,
+        ToNodeId = edge.FromNodeId,
+        Name = edge.Name,
+        RoadClass = edge.RoadClass,
+        AccessProfile = edge.AccessProfile,
+        IsOneWay = false,
+        LengthMeters = edge.LengthMeters,
+        AssumedBaseSpeedKmh = edge.AssumedBaseSpeedKmh,
+        Geometry = (LineString)edge.Geometry.Reverse(),
+        NetworkVersion = edge.NetworkVersion,
+    };
 
     private static double GetMultiplier(IReadOnlyList<TrafficProfile>? profiles, string roadClass, TimeOnly localTime)
     {

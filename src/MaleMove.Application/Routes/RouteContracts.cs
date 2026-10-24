@@ -6,7 +6,18 @@ public sealed record RouteRequestDto(
     CoordinateDto Origin,
     CoordinateDto Destination,
     DateTimeOffset DepartureTime,
-    Guid? TrafficProfileId = null);
+    Guid? TrafficProfileId = null,
+    string? VehicleType = null);
+
+/// <summary>Vehicle types a route can be estimated for; motorcycle is the default (the most common vehicle in Malé).</summary>
+public static class VehicleTypes
+{
+    public const string Motorcycle = "motorcycle";
+    public const string Car = "car";
+    public const string Bicycle = "bicycle";
+    public const string Walking = "walking";
+    public static readonly string[] All = [Motorcycle, Car, Bicycle, Walking];
+}
 
 public sealed record RouteAlternativeDto(
     int Rank,
