@@ -10,6 +10,6 @@ public sealed record MapFeaturePage<T>(IReadOnlyList<T> Features, bool Truncated
 public interface IMapService
 {
     Task<MapFeaturePage<RoadFeatureDto>> GetRoadsAsync(MapBounds bounds, CancellationToken cancellationToken);
-    Task<MapFeaturePage<RoadworkFeatureDto>> GetRoadworksAsync(MapBounds bounds, DateTimeOffset at, CancellationToken cancellationToken);
+    Task<MapFeaturePage<RoadworkFeatureDto>> GetRoadworksAsync(MapBounds bounds, DateTimeOffset at, bool includePending, CancellationToken cancellationToken);
 }
 
