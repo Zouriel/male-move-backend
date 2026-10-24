@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/MaleMove.Api/MaleMove.Api.csproj" />
+  <Project Path="src/MaleMove.Application/MaleMove.Application.csproj" />
+  <Project Path="src/MaleMove.Domain/MaleMove.Domain.csproj" />
+  <Project Path="src/MaleMove.Infrastructure/MaleMove.Infrastructure.csproj" />
+</Solution>
