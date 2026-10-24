@@ -42,7 +42,14 @@ public sealed class RouteService(AppDbContext db) : IRouteService
             ? null
             : await db.TrafficProfiles.AsNoTracking().Where(x => x.Id == request.TrafficProfileId && x.IsActive).ToListAsync(cancellationToken);
 
-        var primary = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, null, vehicle);
+        // Prefer a route that avoids every road under an active roadwork; only pass through one when nothing else connects.
+        var avoidRoadworks = true;
+        var primary = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, null, vehicle, avoidRoadworks);
+        if (primary is null)
+        {
+            avoidRoadworks = false;
+            primary = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, null, vehicle, avoidRoadworks);
+        }
         if (primary is null)
             throw new AppException("No valid route was found. Check the road network and active restrictions.", 422, "route_not_found");
 
@@ -50,7 +57,7 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         if (primary.Steps.Count > 1)
         {
             var detourEdge = primary.Steps.OrderByDescending(x => x.Edge.LengthMeters).First().Edge;
-            alternative = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, [detourEdge.Id], vehicle);
+            alternative = FindPath(startNode, destinationNode, edges, restrictionsByEdge, profile, request.DepartureTime, [detourEdge.Id], vehicle, avoidRoadworks);
             if (alternative is not null && alternative.Steps.Select(x => x.Edge.Id).SequenceEqual(primary.Steps.Select(x => x.Edge.Id)))
                 alternative = null;
         }
@@ -65,7 +72,9 @@ public sealed class RouteService(AppDbContext db) : IRouteService
             "Estimated traffic scenario — no live traffic observations connected.", profileVersion,
             networkVersion, DateTimeOffset.UtcNow,
             [$"Estimated for a {vehicle}. Travel times use assumed base speeds and configured scenario multipliers.",
-             "Permit restrictions apply only when the permit revision is approved and effective at estimated segment entry.",
+             avoidRoadworks
+                 ? "Routes avoid roads under approved roadworks in effect at the time you reach them."
+                 : "No route avoids every roadwork here, so this one passes through the affected roads with their expected delay.",
              "Endpoints are snapped to the nearest loaded road segment."]);
     }
 
@@ -77,7 +86,8 @@ public sealed class RouteService(AppDbContext db) : IRouteService
         IReadOnlyList<TrafficProfile>? profiles,
         DateTimeOffset departure,
         IReadOnlyCollection<Guid>? bannedEdges,
-        string vehicle)
+        string vehicle,
+        bool avoidRoadworks)
     {
         if (start == target) return new PathResult([], departure, departure, 0);
         var adjacency = edges.GroupBy(x => x.FromNodeId).ToDictionary(x => x.Key, x => x.ToArray());
@@ -97,7 +107,8 @@ public sealed class RouteService(AppDbContext db) : IRouteService
                 var edgeRestrictions = restrictions.TryGetValue(edge.Id, out var matches) ? matches : [];
                 var localEntry = TimeZoneInfo.ConvertTime(enteredAt, MaldivesTimeZone);
                 var active = edgeRestrictions.Where(x => IsEffective(x.Permit, localEntry)).ToArray();
-                if (active.Any(x => x.Permit.ImpactType == PermitImpactType.FullClosure
+                if (active.Any(x => avoidRoadworks
+                                    || x.Permit.ImpactType == PermitImpactType.FullClosure
                                     || x.RestrictionType.Equals("full_closure", StringComparison.OrdinalIgnoreCase))) continue;
 
                 var baseSpeed = SpeedFor(vehicle, edge.AssumedBaseSpeedKmh.GetValueOrDefault(15d));
