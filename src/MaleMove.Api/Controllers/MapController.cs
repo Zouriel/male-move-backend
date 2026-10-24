@@ -12,10 +12,13 @@ public sealed class MapController(IMapService map) : BaseApiController
         [FromQuery] double east, [FromQuery] double north, CancellationToken cancellationToken) =>
         Success(await map.GetRoadsAsync(new MapBounds(west, south, east, north), cancellationToken));
 
+    /// <summary>Public for the route check: anonymous callers see approved roadworks only; staff also see permits awaiting review.</summary>
     [HttpGet("roadworks")]
+    [AllowAnonymous]
     public async Task<IActionResult> Roadworks([FromQuery] double west, [FromQuery] double south,
         [FromQuery] double east, [FromQuery] double north, [FromQuery] DateTimeOffset? at,
         CancellationToken cancellationToken) =>
-        Success(await map.GetRoadworksAsync(new MapBounds(west, south, east, north), at ?? DateTimeOffset.UtcNow, cancellationToken));
+        Success(await map.GetRoadworksAsync(new MapBounds(west, south, east, north), at ?? DateTimeOffset.UtcNow,
+            includePending: User.Identity?.IsAuthenticated == true, cancellationToken));
 }
 

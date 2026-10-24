@@ -23,13 +23,13 @@ public sealed class MapService(AppDbContext db) : IMapService
         return new MapFeaturePage<RoadFeatureDto>(features, truncated);
     }
 
-    public async Task<MapFeaturePage<RoadworkFeatureDto>> GetRoadworksAsync(MapBounds bounds, DateTimeOffset at, CancellationToken cancellationToken)
+    public async Task<MapFeaturePage<RoadworkFeatureDto>> GetRoadworksAsync(MapBounds bounds, DateTimeOffset at, bool includePending, CancellationToken cancellationToken)
     {
         var area = CreateBounds(bounds);
         var rows = await db.Permits.AsNoTracking()
             // Approved works in effect now, plus permits awaiting review so a new submission shows at once (marked pending).
             .Where(x => (x.ApprovalState == PermitApprovalState.Approved && x.StartsAt <= at && x.EndsAt > at)
-                        || ((x.ApprovalState == PermitApprovalState.Submitted || x.ApprovalState == PermitApprovalState.NeedsReview) && x.EndsAt > at))
+                        || (includePending && (x.ApprovalState == PermitApprovalState.Submitted || x.ApprovalState == PermitApprovalState.NeedsReview) && x.EndsAt > at))
             .SelectMany(x => x.RoadSegments.Where(segment => segment.RoadSegment.Geometry.Intersects(area)).Select(segment => new
             {
                 x.Id, x.PermitNumber, x.LocationDescription, x.ImpactType, x.StartsAt, x.EndsAt, x.ApprovalState,
