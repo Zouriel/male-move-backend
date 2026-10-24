@@ -61,8 +61,35 @@ public sealed class PermitService(AppDbContext db) : IPermitService
         permit.Revision++;
         permit.UpdatedAt = DateTimeOffset.UtcNow;
         db.PermitAuditEvents.Add(Audit(permit.Id, actorId, "permit.updated", previousState, permit.ApprovalState.ToString()));
+        await MatchRoadsAsync(permit, request.StreetNames, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return ToDto(permit);
+    }
+
+    /// <summary>
+    /// Links the permit to the loaded road segments whose street name appears in its location (or in the street names
+    /// read from the document), limited to the island it names. A reviewer still confirms the match before approval.
+    /// </summary>
+    private async Task MatchRoadsAsync(Permit permit, IReadOnlyList<string>? streetNames, CancellationToken cancellationToken)
+    {
+        var text = string.Join(" | ", new[] { permit.LocationDescription }.Concat(streetNames ?? [])).ToLowerInvariant();
+        var names = await db.RoadSegments.AsNoTracking().Where(x => x.Name != null).Select(x => x.Name!).Distinct().ToListAsync(cancellationToken);
+        var matched = names.Where(n => n.Length >= 4 && text.Contains(n.ToLowerInvariant(), StringComparison.Ordinal)).ToList();
+        // Island bands within Greater Malé, by latitude: Malé is south of the airport, Hulhumalé north of it.
+        (double Min, double Max)? band = text.Contains("hulhumal") ? (4.200, 4.260) : text.Contains("male") || text.Contains("malé") ? (4.160, 4.185) : null;
+        var segments = matched.Count == 0 ? [] : await db.RoadSegments.AsNoTracking()
+            .Where(x => x.Name != null && matched.Contains(x.Name))
+            .Where(x => band == null || (x.Geometry.Centroid.Y >= band.Value.Min && x.Geometry.Centroid.Y <= band.Value.Max))
+            .Select(x => x.Id).ToListAsync(cancellationToken);
+
+        await db.PermitRoadSegments.Where(x => x.PermitId == permit.Id).ExecuteDeleteAsync(cancellationToken);
+        var restriction = permit.ImpactType == PermitImpactType.FullClosure ? "full_closure" : permit.ImpactType.ToString().ToLowerInvariant();
+        db.PermitRoadSegments.AddRange(segments.Select(id => new PermitRoadSegment
+        {
+            PermitId = permit.Id, RoadSegmentId = id, RestrictionType = restriction,
+            DelaySeconds = permit.ImpactType == PermitImpactType.FullClosure ? null : 120, MatchConfidence = 0.6,
+            MatchEvidence = $"Street name matched: {string.Join(", ", matched)}",
+        }));
     }
 
     public async Task<PermitSummaryDto> SubmitAsync(Guid id, Guid actorId, CancellationToken cancellationToken)

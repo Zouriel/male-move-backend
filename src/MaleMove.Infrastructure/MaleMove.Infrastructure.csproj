@@ -2,6 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MaleMove.Domain\MaleMove.Domain.csproj" />
     <ProjectReference Include="..\MaleMove.Application\MaleMove.Application.csproj" />
+    <PackageReference Include="Anthropic" Version="12.58.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <PrivateAssets>all</PrivateAssets>

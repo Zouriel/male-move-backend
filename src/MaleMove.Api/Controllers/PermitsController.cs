@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace MaleMove.Api.Controllers;
 
 [Authorize]
-public sealed class PermitsController(IPermitService permits, IPermitUploadService uploads) : BaseApiController
+public sealed class PermitsController(IPermitService permits, IPermitUploadService uploads, IPermitExtractionService extraction) : BaseApiController
 {
     [HttpGet]
     [Authorize(Policy = "PlannerRead")]
@@ -33,6 +33,12 @@ public sealed class PermitsController(IPermitService permits, IPermitUploadServi
         var permit = await uploads.UploadAsync(new PermitUploadRequest(stream, file.FileName, file.ContentType, file.Length, CurrentUserId), cancellationToken);
         return Created(permit);
     }
+
+    /// <summary>Reads the uploaded permit document and suggests its fields. Nothing is saved.</summary>
+    [HttpPost("{id:guid}/extract")]
+    [Authorize(Policy = "PermitOfficer")]
+    public async Task<IActionResult> Extract(Guid id, CancellationToken cancellationToken) =>
+        Success(await extraction.ExtractAsync(id, cancellationToken));
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = "PermitOfficer")]

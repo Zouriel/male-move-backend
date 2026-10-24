@@ -27,7 +27,8 @@ public sealed record UpdatePermitRequest(
     DateTimeOffset? EndsAt,
     TimeOnly? DailyStart,
     TimeOnly? DailyEnd,
-    int Revision);
+    int Revision,
+    IReadOnlyList<string>? StreetNames = null);
 
 public interface IPermitService
 {
