@@ -1,9 +1,18 @@
 # MALÉ MOVE staging. Install with deploy/staging/install-route.sh, which fills in the bcrypt hash,
-# validates the whole Caddy config and reloads. Basic auth guards the site: the API issues local tokens on staging.
+# validates the whole Caddy config and reloads.
+# Basic auth guards the web app and the local token issuer. The rest of /api/* is left to the API's own
+# JWT check: the app sends its bearer token in the same Authorization header that basic auth uses, and
+# those tokens can only be obtained through the gated /api/v1/dev/token.
 staging-4.zouriel.com {
 	header X-Robots-Tag "noindex, nofollow"
 	header >Strict-Transport-Security "max-age=31536000"
-	basic_auth {
+	@gated {
+		not {
+			path /api/*
+			not path /api/v1/dev/token
+		}
+	}
+	basic_auth @gated {
 		malemove __BASIC_AUTH_HASH__
 	}
 	handle /api/* {
