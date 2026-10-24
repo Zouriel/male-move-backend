@@ -1,6 +1,7 @@
 using MaleMove.Application.Permits;
 using MaleMove.Application.Routes;
 using MaleMove.Application.Map;
+using MaleMove.Application.Population;
 using MaleMove.Infrastructure.Persistence;
 using MaleMove.Infrastructure.Services;
 using MaleMove.Infrastructure.Storage;
@@ -29,4 +30,3 @@ public static class DependencyInjection
         return services;
     }
 }
-
