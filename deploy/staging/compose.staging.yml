@@ -4,8 +4,10 @@
 #
 # Shares nothing with the other stacks on the host: its own Postgres, ClamAV, volumes and internal
 # network. Only male-move-api and male-move-web join the shared `proxy` network, under prefixed names.
-# Images are built on a workstation and loaded onto the server (ship.sh). On the server, from /opt/apps/male-move:
-#   docker compose -p male-move -f compose.staging.yml --env-file .env up -d
+# Server layout: /opt/apps/male-move/{male-move-backend,male-move-frontend} are clones of the GitHub repos and
+# /opt/apps/male-move/.env holds POSTGRES_PASSWORD, DEV_SIGNING_KEY and NODE_AUTH_TOKEN (read:packages).
+# Deploy with `deploy male-move` (deploy/staging/deploy-script-male-move), which pulls main and runs:
+#   docker compose -p male-move -f male-move-backend/deploy/staging/compose.staging.yml --env-file .env up -d --build
 name: male-move
 
 x-hardened: &hardened
@@ -51,6 +53,8 @@ services:
     cpus: 1.0
 
   male-move-api:
+    build:
+      context: ../..
     image: male-move/api:latest
     container_name: male-move-api
     <<: *hardened
@@ -82,12 +86,18 @@ services:
     pids_limit: 256
 
   male-move-web:
+    build:
+      context: ../../../male-move-frontend
+      args:
+        CONFIGURATION: staging
+      # @zouriel/ui is a private GitHub Packages dependency: the token goes in as a build secret.
+      secrets: [npm_token]
     image: male-move/web:latest
     container_name: male-move-web
     <<: *hardened
-    cap_add: [CHOWN, SETUID, SETGID]
+    # nginx-unprivileged runs as uid 101 on port 8080 and needs no capabilities.
     read_only: true
-    tmpfs: [/var/cache/nginx, /var/run, /tmp]
+    tmpfs: [/var/cache/nginx, /tmp]
     networks: [proxy]
     mem_limit: 64m
     cpus: 0.5
@@ -97,6 +107,11 @@ volumes:
   male-move-postgres:
   male-move-clamav:
   male-move-permits:
+
+secrets:
+  # NODE_AUTH_TOKEN from .env. BuildKit mounts it for npm ci only; it is not stored in an image layer.
+  npm_token:
+    environment: NODE_AUTH_TOKEN
 
 networks:
   male-move-internal:

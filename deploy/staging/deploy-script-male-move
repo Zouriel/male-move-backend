@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Installed on zouriel-server as /opt/deploy-scripts/deploy-script-male-move; run with `deploy male-move`.
+# Fast-forwards both clones to origin/main, then rebuilds and restarts only the male-move compose project.
+set -euo pipefail
+
+APP_NAME="male-move"
+APP_DIR="/opt/apps/male-move"
+REPOS=(male-move-backend male-move-frontend)
+BRANCH="main"
+COMPOSE_FILE="$APP_DIR/male-move-backend/deploy/staging/compose.staging.yml"
+RUN_AS_USER="deploy"
+LOCK_FILE="/tmp/deploy-${APP_NAME}.lock"
+
+log() {
+  printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+run_as_deploy() {
+  if [ "$(id -un)" = "$RUN_AS_USER" ]; then
+    "$@"
+  else
+    sudo -u "$RUN_AS_USER" "$@"
+  fi
+}
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+  log "Another ${APP_NAME} deployment is already running."
+  exit 1
+fi
+
+log "Deploying ${APP_NAME} from origin/${BRANCH}"
+
+for repo in "${REPOS[@]}"; do
+  dir="$APP_DIR/$repo"
+  if [ ! -d "$dir/.git" ]; then
+    log "Missing git repository at ${dir}"
+    exit 1
+  fi
+  status="$(run_as_deploy git -C "$dir" status --porcelain)"
+  if [ -n "$status" ]; then
+    log "Working tree of ${repo} is dirty. Commit, stash, or clean local changes before deploying."
+    printf '%s\n' "$status"
+    exit 1
+  fi
+  log "Updating ${repo}"
+  run_as_deploy git -C "$dir" fetch origin "$BRANCH"
+  run_as_deploy git -C "$dir" checkout "$BRANCH" >/dev/null
+  run_as_deploy git -C "$dir" merge --ff-only "origin/${BRANCH}"
+done
+
+log "Rebuilding and starting Docker services"
+run_as_deploy docker compose -p "$APP_NAME" -f "$COMPOSE_FILE" --env-file "$APP_DIR/.env" up -d --build --remove-orphans
+
+log "Pruning unused Docker images"
+run_as_deploy docker image prune -f >/dev/null
+
+log "Current service status"
+run_as_deploy docker compose -p "$APP_NAME" -f "$COMPOSE_FILE" --env-file "$APP_DIR/.env" ps
+
+log "Deploy complete: ${APP_NAME}"

@@ -1,5 +1,5 @@
-# MALÉ MOVE staging. Copy to /opt/stacks/proxy/Caddyfile.d/male-move.caddy (ship.sh fills in the hash),
-# validate, then reload Caddy. Basic auth guards the whole site: the API issues local tokens on staging.
+# MALÉ MOVE staging. Install with deploy/staging/install-route.sh, which fills in the bcrypt hash,
+# validates the whole Caddy config and reloads. Basic auth guards the site: the API issues local tokens on staging.
 staging-4.zouriel.com {
 	header X-Robots-Tag "noindex, nofollow"
 	header >Strict-Transport-Security "max-age=31536000"
