@@ -66,14 +66,16 @@ services:
       male-move-clamav:
         condition: service_started
     environment:
-      # Staging: production code paths plus the local token issuer (no identity provider yet).
-      # The whole site is behind Caddy basic auth because of that.
+      # Staging: production code paths plus the local token issuer (no identity provider yet),
+      # which issues tokens only for the login in .env (the app's sign-in screen).
       ASPNETCORE_ENVIRONMENT: Staging
       AllowedHosts: staging-4.zouriel.com
       ConnectionStrings__Postgres: Host=male-move-postgres;Port=5432;Database=malemove;Username=malemove_app;Password=${POSTGRES_PASSWORD:?};Include Error Detail=false
       Database__MigrateOnStartup: "true"
       Authentication__Audience: male-move-api
       Authentication__DevelopmentSigningKey: ${DEV_SIGNING_KEY:?}
+      Authentication__LoginUsername: ${LOGIN_USERNAME:?}
+      Authentication__LoginPassword: ${LOGIN_PASSWORD:?}
       Cors__AllowedOrigins__0: https://staging-4.zouriel.com
       MalwareScanner__Host: male-move-clamav
       MalwareScanner__Port: "3310"
