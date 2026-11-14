@@ -5,7 +5,7 @@ COPY src ./src
 RUN dotnet restore src/MaleMove.Api/MaleMove.Api.csproj
 RUN dotnet publish src/MaleMove.Api/MaleMove.Api.csproj -c Release -o /out --no-restore
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     DOTNET_EnableDiagnostics=0
 WORKDIR /app
